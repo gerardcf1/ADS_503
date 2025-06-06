@@ -1,1 +1,44 @@
+---
+title: "ADS 503 Final Project"
+author: "April Chia"
+output:
+  pdf_document:
+    latex_engine: xelatex
+date: "2025-06-05"
+---
+## Packages used
+```{r warning=FALSE, message=FALSE}
+library(caret)
+library(tidyverse)
+library(scales)
+library(corrplot)
+library(Hmisc)
+library(mlbench)
+library(e1071)
+library(randomForest)
+library(gt)
+library(pls)
+library(elasticnet)
+```
+
+## Import dataset
+```{r}
+cancer_data <- read.csv("breast-cancer.csv")
+head(cancer_data)
+```
+
+## EDA
+```{r}
+summary(cancer_data)
+
+# Data types
+str(cancer_data)
+
+# Missing values
+sum(is.na(cancer_data))
+```
+
+## Pre-processing
+
+## Data splitting
 
