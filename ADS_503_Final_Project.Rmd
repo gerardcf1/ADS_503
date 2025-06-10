@@ -10,7 +10,7 @@ date: "2025-06-05"
 ```{r warning=FALSE, message=FALSE}
 library(caret)
 library(tidyverse)
-library(scales)
+library(ggplot2)
 library(corrplot)
 library(Hmisc)
 library(mlbench)
@@ -36,9 +36,72 @@ str(cancer_data)
 
 # Missing values
 sum(is.na(cancer_data))
+
+# Duplicates
+duplicated(cancer_data)
+
+# Distribution of predictors
+hist.data.frame(cancer_data)
+
+# Distribution of diagnosis classes
+table(cancer_data$diagnosis)
+prop.table(table(cancer_data$diagnosis))
+
+# Relationship between predictors and response
+predictors <- c("radius_mean", "texture_mean", "perimeter_mean",
+                "area_mean", "smoothness_mean", "compactness_mean",
+                "concavity_mean", "concave points_mean", "symmetry_mean",
+                "fractal_dimension_mean", "radius_se", "texture_se",
+                "perimeter_se", "area_se", "smoothness_se",
+                "compactness_se", "concavity_se", "concave points_se",
+                "symmetry_se", "fractal_dimension_se", "radius_worst",
+                "texture_worst", "perimeter_worst", "area_worst",
+                "smoothness_worst", "compactness_worst", "concavity_worst",
+                "concave points_worst", "symmetry_worst", "fractal_dimension_worst")
+
+par(mfrow = c(6, 6))
+
+for (var in predictors) {
+  boxplot(cancer_data[[var]] ~ cancer_data$diagnosis, main = paste(var, "by diagnosis"), xlab = "diagnosis", ylab = var)
+}
+
+# Predictors w/ near zero variance
+degenerate <- nearZeroVar(cancer_data)
+print(degenerate)
+
+# Correlation between predictors
+cor(cancer_data[, -2])
+
+# Outlier detection
+boxplot(cancer_data[-2])
+
+# Skewness
+apply(cancer_data[, -2], 2, skewness)
 ```
 
 ## Pre-processing
+```{r}
+# Remove uneccessary columns
+df <- cancer_data[, -which(names(cancer_data) == "id")]
+head(df)
+
+# Convert diagnosis to factor if necessary
+
+# Feature scaling
+
+# Remove highly correlated features
+
+# BoxCox Transformation
+non_bct_cols <- c("smoothness_mean", "texture_worst", "smoothness_worst", "concave.points_worst")
+bct_cols <- setdiff(names(df), non_bct_cols)
+
+params <- preProcess(df[, bct_cols], method = "BoxCox")
+df_transformed <- predict(params, df[, bct_cols])
+df[, bct_cols] <- df_transformed
+```
 
 ## Data splitting
+```{r}
+set.seed(123)
+```
 
