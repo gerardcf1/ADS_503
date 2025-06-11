@@ -1,0 +1,87 @@
+---
+title: "EDA: Breast Cancer Dataset"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(naniar)
+library(knitr)
+```
+
+## 1. Data Summary
+
+```{r}
+df <- read.csv("breast-cancer.csv")
+summary(df)
+```
+
+## 2. Missing Values
+
+```{r}
+vis_miss(df)
+colSums(is.na(df))
+```
+
+## 3. Feature Distributions (Histograms)
+
+```{r, fig.width=16, fig.height=12}
+df_long <- df %>%
+  pivot_longer(cols = -diagnosis, names_to = "feature", values_to = "value")
+
+ggplot(df_long, aes(x = value)) +
+  facet_wrap(~ feature, scales = "free", ncol = 4) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "white") +
+  theme_minimal() +
+  labs(title = "Histograms of All Features", x = "Value", y = "Count")
+```
+
+## 4. Correlation Matrix (Circle Only, Clean)
+
+```{r, fig.width=12, fig.height=10}
+num_df <- df %>% select_if(is.numeric)
+cor_mat <- cor(num_df)
+
+corrplot::corrplot(cor_mat, method = "circle", order = "hclust",
+                   type = "upper", tl.col = "black", tl.srt = 45)
+```
+
+## 5. Skewness Summary
+
+```{r}
+library(e1071)
+
+df %>%
+  select_if(is.numeric) %>%
+  summarise_all(~ e1071::skewness(.)) %>%
+  pivot_longer(cols = everything(), names_to = "Feature", values_to = "Skewness") %>%
+  arrange(desc(abs(Skewness))) %>%
+  knitr::kable(digits = 3)
+```
+
+## 6. Outlier Detection (Boxplots by Diagnosis)
+
+```{r, fig.width=16, fig.height=14}
+df %>%
+  pivot_longer(cols = -diagnosis, names_to = "Feature", values_to = "Value") %>%
+  ggplot(aes(x = diagnosis, y = Value, fill = diagnosis)) +
+  geom_boxplot(outlier.colour = "red", alpha = 0.6) +
+  facet_wrap(~ Feature, scales = "free", ncol = 4) +
+  scale_fill_manual(values = c("B" = "#72CA9B", "M" = "#FF9980")) +
+  theme_minimal() +
+  labs(title = "Boxplots for Outlier Detection by Diagnosis",
+       x = "Diagnosis", y = "Value") +
+  theme(legend.position = "none")
+```
+
+## 7.  Target Variable distribution
+
+```{r}
+df %>%
+  count(diagnosis) %>%
+  pivot_wider(names_from = diagnosis, values_from = n) %>%
+  knitr::kable(col.names = c("Benign (B)", "Malignant (M)"),
+               caption = "Diagnosis Distribution")
+```
