@@ -11,6 +11,7 @@ date: "2025-06-05"
 library(caret)
 library(tidyverse)
 library(ggplot2)
+library(reshape2)
 library(corrplot)
 library(Hmisc)
 library(mlbench)
@@ -38,43 +39,65 @@ str(cancer_data)
 sum(is.na(cancer_data))
 
 # Duplicates
-duplicated(cancer_data)
+sum(duplicated(cancer_data))
+```
 
+```{r}
 # Distribution of predictors
-hist.data.frame(cancer_data)
+cancer_data |>
+pivot_longer(-diagnosis, names_to = 'feature', values_to = 'value') |>
+ggplot(aes(x = value)) +
+geom_histogram(bins = 30) +
+facet_wrap(~ feature, scales = "free", ncol = 3) +
+labs(title = 'Glass Data Features', x = "values", y = "Count")
+```
 
+```{r}
 # Distribution of diagnosis classes
 table(cancer_data$diagnosis)
 prop.table(table(cancer_data$diagnosis))
+```
 
+```{r}
 # Relationship between predictors and response
-predictors <- c("radius_mean", "texture_mean", "perimeter_mean",
-                "area_mean", "smoothness_mean", "compactness_mean",
-                "concavity_mean", "concave points_mean", "symmetry_mean",
-                "fractal_dimension_mean", "radius_se", "texture_se",
-                "perimeter_se", "area_se", "smoothness_se",
-                "compactness_se", "concavity_se", "concave points_se",
-                "symmetry_se", "fractal_dimension_se", "radius_worst",
-                "texture_worst", "perimeter_worst", "area_worst",
-                "smoothness_worst", "compactness_worst", "concavity_worst",
-                "concave points_worst", "symmetry_worst", "fractal_dimension_worst")
+predictor_data <- cancer_data[, names(cancer_data) != "diagnosis"]
 
-par(mfrow = c(6, 6))
+# Convert to long format
+df_long <- data.frame(
+  diagnosis = rep(cancer_data$diagnosis, times = ncol(predictor_data)),
+  feature = rep(names(predictor_data), each = nrow(cancer_data)),
+  value = as.vector(as.matrix(predictor_data))
+)
 
-for (var in predictors) {
-  boxplot(cancer_data[[var]] ~ cancer_data$diagnosis, main = paste(var, "by diagnosis"), xlab = "diagnosis", ylab = var)
-}
+ggplot(df_long, aes(x = value, fill = diagnosis)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ feature, scales = "free") +
+  theme_minimal()
+```
 
+```{r}
 # Predictors w/ near zero variance
-degenerate <- nearZeroVar(cancer_data)
+degenerate <- nearZeroVar(predictor_data)
 print(degenerate)
+```
 
+```{r}
 # Correlation between predictors
-cor(cancer_data[, -2])
+cor_matrix <- cor(predictor_data)
+cor_long <- melt(cor_matrix)
 
-# Outlier detection
-boxplot(cancer_data[-2])
+ggplot(cor_long, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",
+                       midpoint = 0, limit = c(-1, 1), space = "Lab",
+                       name = "Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  coord_fixed() +
+  labs(title = "Predictor Correlation Heatmap", x = "", y = "")
+```
 
+```{r}
 # Skewness
 apply(cancer_data[, -2], 2, skewness)
 ```
@@ -85,11 +108,10 @@ apply(cancer_data[, -2], 2, skewness)
 df <- cancer_data[, -which(names(cancer_data) == "id")]
 head(df)
 
-# Convert diagnosis to factor if necessary
+# Convert diagnosis to factor
+df$diagnosis <- factor(df$diagnosis, levels = c("B", "M"))
 
-# Feature scaling
-
-# Remove highly correlated features
+# Feature scaling?
 
 # BoxCox Transformation
 non_bct_cols <- c("smoothness_mean", "texture_worst", "smoothness_worst", "concave.points_worst")
@@ -98,6 +120,11 @@ bct_cols <- setdiff(names(df), non_bct_cols)
 params <- preProcess(df[, bct_cols], method = "BoxCox")
 df_transformed <- predict(params, df[, bct_cols])
 df[, bct_cols] <- df_transformed
+```
+
+```{r}
+# Confirm transformation
+apply(df_transformed[, -1], 2, skewness)
 ```
 
 ## Data splitting
