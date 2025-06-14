@@ -98,7 +98,7 @@ ggplot(cor_long, aes(Var1, Var2, fill = value)) +
 ```
 
 ```{r}
-# Skewness  s
+# Skewness
 apply(cancer_data[, -2], 2, skewness)
 ```
 
@@ -110,8 +110,6 @@ head(df)
 
 # Convert diagnosis to factor
 df$diagnosis <- factor(df$diagnosis, levels = c("B", "M"))
-
-# Feature scaling?
 
 # BoxCox Transformation
 non_bct_cols <- c("smoothness_mean", "texture_worst", "smoothness_worst", "concave.points_worst")
@@ -130,5 +128,62 @@ apply(df_transformed[, -1], 2, skewness)
 ## Data splitting
 ```{r}
 set.seed(123)
+trainIndex <- createDataPartition(df_transformed$diagnosis, p = 0.8, list = FALSE)
+
+train <- df_transformed[trainIndex, ]
+test <- df_transformed[-trainIndex, ]
 ```
 
+## Models
+```{r}
+ctrl <- trainControl(method = "cv", number = 10)
+
+# Neural Network Model
+set.seed(123)
+nnetGrid <- expand.grid(decay = c(0, 0.01, 0.1), size = 1:10)
+
+nnet_model <- train(x = train, y = train$diagnosis, 
+  method = "nnet",
+  preProcess = c("center", "scale"),
+  tuneGrid = nnetGrid,
+  trControl = ctrl,
+  linout = TRUE, 
+  trace = FALSE, 
+  maxit = 1000
+)
+
+# Naive Bayes
+set.seed(123)
+nb_model <- train(x = train, y = train$diagnosis,
+  method = "nb",
+  preProcess = c("center", "scale"),
+  trControl = ctrl,
+)
+
+# SVM
+set.seed(123)
+svm_model <- train(x = train, y = train$diagnosis,
+  method = "svmRadial",
+  preProcess = c("center", "scale"),
+  tuneLength = 10,
+  trControl = ctrl)
+
+# KNN
+set.seed(123)
+knn_model <- train(x = train, y = train$diagnosis,
+  method = "knn",
+  preProcess = c("center", "scale"),
+  tuneGrid = data.frame(k = 1:20),
+  trControl = ctrl)
+
+# FDA
+
+
+# Random Forest
+set.seed(123)
+rf_model <- randomForest(x = train, y = train$diagnosis,
+  importance = TRUE, 
+  ntree = 1000)
+
+#
+```
