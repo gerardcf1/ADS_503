@@ -98,7 +98,7 @@ ggplot(cor_long, aes(Var1, Var2, fill = value)) +
 ```
 
 ```{r}
-# Skewness
+# Skewness  s
 apply(cancer_data[, -2], 2, skewness)
 ```
 
