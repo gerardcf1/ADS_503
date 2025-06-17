@@ -20,6 +20,7 @@ library(randomForest)
 library(gt)
 library(pls)
 library(elasticnet)
+library(pROC)
 ```
 
 ## Import dataset
@@ -136,54 +137,333 @@ test <- df_transformed[-trainIndex, ]
 
 ## Models
 ```{r}
-ctrl <- trainControl(method = "cv", number = 10)
+ctrl <- trainControl(method = "cv", 
+                     number = 10, 
+                     summaryFunction = twoClassSummary, 
+                     classProbs = TRUE, 
+                     savePredictions = TRUE)
 
-# Neural Network Model
 set.seed(123)
-nnetGrid <- expand.grid(decay = c(0, 0.01, 0.1), size = 1:10)
+# Logistic Regression 
+lr_model <- train(x = train[, -1],
+                  y = train$diagnosis,
+                  method = "glm",
+                  preProcess = c("center", "scale"),
+                  metric = "ROC",
+                  trControl = ctrl)
+lr_model
 
-nnet_model <- train(x = train, y = train$diagnosis, 
-  method = "nnet",
-  preProcess = c("center", "scale"),
-  tuneGrid = nnetGrid,
-  trControl = ctrl,
-  linout = TRUE, 
-  trace = FALSE, 
-  maxit = 1000
-)
+testResults <- data.frame(obs = test$diagnosis, LogReg = predict(lr_model, test[, -1]))
+```
 
-# Naive Bayes
+```{r}
+# ROC curve for log reg
+lr_roc <- roc(response = lr_model$pred$obs,
+              predictor = lr_model$pred$M,
+              levels = rev(levels(lr_model$pred$obs)))
+
+plot(lr_roc, legaces.axes = TRUE)
+
+# Confusion Matrix
+confusionMatrix(testResults$LogReg, testResults$obs, positive = "M")
+```
+
+```{r}
+# Penalized Logistic Regression
+plrGrid <- expand.grid(alpha = c(0, .1, .2, .4, .6, .8, 1),
+                       lambda = seq(.01, .2, length = 10))
+
 set.seed(123)
-nb_model <- train(x = train, y = train$diagnosis,
-  method = "nb",
-  preProcess = c("center", "scale"),
-  trControl = ctrl,
-)
+plr_model <- train(x = train[, -1],
+                   y = train$diagnosis,
+                   method = "glmnet",
+                   tuneGrid = plrGrid,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl)
+plr_model
 
-# SVM
+testResults$PLR <- predict(plr_model, test[, -1])
+```
+
+```{r}
+# ROC curve for penalized log reg
+plr_roc <- roc(response = plr_model$pred$obs,
+              predictor = plr_model$pred$M,
+              levels = rev(levels(plr_model$pred$obs)))
+
+plot(plr_roc, legaces.axes = TRUE)
+
+# Confusion Matrix
+confusionMatrix(testResults$PLR, testResults$obs, positive = "M")
+```
+
+```{r}
+# LDA
 set.seed(123)
-svm_model <- train(x = train, y = train$diagnosis,
-  method = "svmRadial",
-  preProcess = c("center", "scale"),
-  tuneLength = 10,
-  trControl = ctrl)
+lda_model <- train(x = train[, -1],
+                   y = train$diagnosis,
+                   method = "lda",
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl)
+lda_model
 
+testResults$LDA <- predict(lda_model, test[, -1])
+```
+
+```{r}
+# ROC curve for LDA
+lda_roc <- roc(response = lda_model$pred$obs,
+              predictor = lda_model$pred$M,
+              levels = rev(levels(lda_model$pred$obs)))
+
+plot(lda_roc, legaces.axes = TRUE)
+
+# Confusion Matrix
+confusionMatrix(testResults$LDA, testResults$obs, positive = "M")
+```
+
+```{r}
+# PLSDA
+plsGrid <- expand.grid(ncomp = 1:20)
+
+set.seed(123)
+pls_model <- train(x = train[, -1],
+                   y = train$diagnosis,
+                   method = "pls",
+                   tuneGrid = plsGrid,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl)
+
+pls_model
+
+testResults$PLS <- predict(pls_model, test[, -1])
+```
+
+```{r}
+# ROC curve for PLS
+pls_roc <- roc(response = pls_model$pred$obs,
+              predictor = pls_model$pred$M,
+              levels = rev(levels(pls_model$pred$obs)))
+
+plot(pls_roc, legaces.axes = TRUE)
+
+# Confusion Matrix
+confusionMatrix(testResults$PLS, testResults$obs, positive = "M")
+```
+
+```{r}
+# MDA
+mdaGrid <- expand.grid(subclasses = 1:3)
+
+set.seed(123)
+mda_model <- train(x = train[, -1],
+                   y = train$diagnosis,
+                   method = "mda",
+                   tuneGrid = mdaGrid,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl)
+mda_model
+
+testResults$MDA <- predict(mda_model, test[, -1])
+```
+
+```{r}
+# ROC curve for MDA
+mda_roc <- roc(response = mda_model$pred$obs,
+              predictor = mda_model$pred$M,
+              levels = rev(levels(mda_model$pred$obs)))
+
+plot(mda_roc, legaces.axes = TRUE)
+
+# Confusion Matrix
+confusionMatrix(testResults$MDA, testResults$obs, positive = "M")
+```
+
+```{r}
+# Decision Trees
+set.seed(123)
+rpart_model <- train(x = train[, -1],
+                     y = train$diagnosis,
+                     method = "rpart",
+                     tuneLength = 30,
+                     preProcess = c("center", "scale"),
+                     metric = "ROC",
+                     trControl = ctrl)
+rpart_model
+
+testResults$DecisionTree <- predict(rpart_model, test[, -1])
+```
+
+```{r}
+# ROC curve for decision trees
+rpart_roc <- roc(response = rpart_model$pred$obs,
+              predictor = rpart_model$pred$M,
+              levels = rev(levels(rpart_model$pred$obs)))
+
+plot(rpart_roc, legaces.axes = TRUE)
+
+# Confusion Matrix
+confusionMatrix(testResults$DecisionTree, testResults$obs, positive = "M")
+```
+
+```{r}
+# Random Forest
+mtryValues <- seq(1, 10, 1)
+rfGrid <- data.frame(mtry = mtryValues)
+
+set.seed(123)
+rf_model <- train(x = train[, -1], 
+                  y = train$diagnosis,
+                  method = "rf",
+                  ntree = 1000,
+                  preProcess = c("center", "scale"),
+                  tuneGrid = rfGrid,
+                  metric = "ROC",
+                  trControl = ctrl)
+rf_model
+
+testResults$RF <- predict(rf_model, test[, -1])
+```
+
+```{r}
+# ROC curve for random forest
+rf_roc <- roc(response = rf_model$pred$obs,
+              predictor = rf_model$pred$M,
+              levels = rev(levels(rf_model$pred$obs)))
+
+plot(rf_roc, legaces.axes = TRUE)
+
+# Confusion Matrix
+confusionMatrix(testResults$RF, testResults$obs, positive = "M")
+```
+
+```{r}
+# Boosted Trees
+gbmGrid <-expand.grid(interaction.depth = c(1, 3, 5, 7, 9),
+                      n.trees = (1:20)*100,
+                      shrinkage = c(.01, .1),
+                      n.minobsinnode = 5)
+  
+set.seed(123)
+gbm_model <- train(x = train[, -1],
+                   y = train$diagnosis,
+                   method = "gbm",
+                   preProcess = c("center", "scale"),
+                   tuneGrid = gbmGrid,
+                   verbose = FALSE,
+                   metric = "ROC",
+                   trControl = ctrl)
+gbm_model
+
+testResults$BoostedTree <- predict(gbm_model, test[, -1])
+```
+
+```{r}
+# ROC curve for boosted trees
+gbm_roc <- roc(response = gbm_model$pred$obs,
+              predictor = gbm_model$pred$M,
+              levels = rev(levels(gbm_model$pred$obs)))
+
+plot(gbm_roc, legaces.axes = TRUE)
+
+# Confusion Matrix
+confusionMatrix(testResults$BoostedTree, testResults$obs, positive = "M")
+```
+
+```{r}
 # KNN
 set.seed(123)
-knn_model <- train(x = train, y = train$diagnosis,
-  method = "knn",
-  preProcess = c("center", "scale"),
-  tuneGrid = data.frame(k = 1:20),
-  trControl = ctrl)
+knn_model <- train(x = train[, -1], 
+                   y = train$diagnosis,
+                   method = "knn",
+                   preProcess = c("center", "scale"),
+                   tuneLength = 20,
+                   metric = "ROC",
+                   trControl = ctrl)
+knn_model
 
-# FDA
-
-
-# Random Forest
-set.seed(123)
-rf_model <- randomForest(x = train, y = train$diagnosis,
-  importance = TRUE, 
-  ntree = 1000)
-
-#
+testResults$KNN <- predict(knn_model, test[, -1])
 ```
+
+```{r}
+# ROC curve for KNN
+knn_roc <- roc(response = knn_model$pred$obs,
+              predictor = knn_model$pred$M,
+              levels = rev(levels(knn_model$pred$obs)))
+
+plot(knn_roc, legaces.axes = TRUE)
+
+# Confusion Matrix
+confusionMatrix(testResults$KNN, testResults$obs, positive = "M")
+```
+
+```{r}
+# Neural Network Model
+nnetGrid <- expand.grid(size = 1:2, decay = c(0, .1, .2, .3, .4, .5, 1))
+
+set.seed(123)
+nnet_model <- train(x = train[, -1], 
+                    y = train$diagnosis,
+                    method = "nnet",
+                    preProcess = c("center", "scale"),
+                    tuneGrid = nnetGrid,
+                    metric = "ROC",
+                    linout = FALSE, 
+                    trace = FALSE, 
+                    maxit = 1000,
+                    trControl = ctrl)
+nnet_model
+
+testResults$NNet <- predict(nnet_model, test[, -1])
+```
+
+```{r}
+# ROC curve for neural network
+nnet_roc <- roc(response = nnet_model$pred$obs,
+              predictor = nnet_model$pred$M,
+              levels = rev(levels(nnet_model$pred$obs)))
+
+plot(nnet_roc, legaces.axes = TRUE)
+
+# Confusion Matrix
+confusionMatrix(testResults$NNet, testResults$obs, positive = "M")
+```
+
+## Compare Models
+```{r}
+par(oma = c(0, 0, .75, 0))
+
+plot(lr_roc, type = "s", col = 'red', legacy.axes = TRUE, lwd = 2)
+plot(plr_roc, type = "s", add = TRUE, col = 'green', legacy.axes = TRUE, lwd = 2)
+plot(lda_roc, type = "s", add = TRUE, col = 'blue', legacy.axes = TRUE, lwd = 2)
+plot(pls_roc, type = "s", add = TRUE, col = 'yellow', legacy.axes = TRUE, lwd = 2)
+plot(mda_roc, type = "s", add = TRUE, col = 'pink', legacy.axes = TRUE, lwd = 2)
+plot(rpart_roc, type = "s", add = TRUE, col = 'purple', legacy.axes = TRUE, lwd = 2)
+plot(rf_roc, type = "s", add = TRUE, col = 'orange', legacy.axes = TRUE, lwd = 2)
+plot(gbm_roc, type = "s", add = TRUE, col = 'cyan', legacy.axes = TRUE, lwd = 2)
+plot(knn_roc, type = "s", add = TRUE, col = 'brown', legacy.axes = TRUE, lwd = 2)
+plot(nnet_roc, type = "s", add = TRUE, col = 'gold', legacy.axes = TRUE, lwd = 2)
+legend("bottomright", 
+       legend = c("Logistic Regression", "Penalized LogReg", "LDA", "PLS", 
+                  "MDA", "Decision Tree", "Random Forest", "Boosted Tree", 
+                  "KNN", "Neural Net"), 
+       col = c("red", "green", "blue", "yellow", "pink", 
+               "purple", "orange", "cyan", "brown", "gold"), 
+       lwd = 2, 
+       cex = 0.7, 
+       inset = 0.01)
+title(main = "Comparison of ROC Curves by Model", outer = TRUE)
+```
+
+```{r}
+# Dot plot comparing models
+models <- list(LogisticRegression = lr_model, PLR = plr_model,LDA = lda_model, PLS = pls_model, MDA = mda_model, DecisionTree = rpart_model, RandomForest = rf_model, Boosted = gbm_model, KNN = knn_model, NeuralNet = nnet_model)
+
+results_models <- resamples(models)
+dotplot(results_models)
+```
+
