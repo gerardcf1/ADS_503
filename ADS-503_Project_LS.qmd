@@ -1,0 +1,187 @@
+---
+title: "ADS-503 Project"
+author: "Luigi Salemi"
+format: pdf
+editor: visual
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(naniar)
+library(knitr)
+library(caret)
+library(corrplot)
+library(glmnet)
+library(pROC)
+library(kernlab)
+library(e1071)
+library(randomForest)
+library(C50)
+```
+
+## 1. Data Summary
+
+```{r}
+df <- read.csv("breast-cancer.csv")
+df <- df %>% select(-id)
+summary(df)
+```
+
+## 2. Missing Values
+
+```{r}
+vis_miss(df)
+colSums(is.na(df))
+```
+
+## 3. Feature Distributions (Histograms)
+
+```{r, fig.width=16, fig.height=12}
+df_long <- df %>%
+  pivot_longer(cols = -diagnosis, names_to = "feature", values_to = "value")
+
+ggplot(df_long, aes(x = value)) +
+  facet_wrap(~ feature, scales = "free", ncol = 5) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "white") +
+  theme_minimal() +
+  labs(title = "Histograms of All Features", x = "Value", y = "Count")
+```
+
+## 4. Correlation Matrix
+
+```{r, fig.width=10, fig.height=10}
+numeric_cols <- df %>% select_if(is.numeric)
+cor_matrix <- cor(numeric_cols)
+
+corrplot(cor_matrix, method = "circle", type = "lower", order = "hclust", 
+         tl.col = "black", tl.srt = 45, tl.cex = 0.7, 
+         addCoef.col = "black", number.cex = 0.4, cl.cex = 0.8,
+         title = "Correlation Matrix of Breast Cancer Features",
+         mar=c(0,0,1,0))
+```
+
+## 5. Data Preparation for Modeling
+
+```{r}
+df$diagnosis <- factor(df$diagnosis, levels = c("B", "M"), labels = c("Benign", "Malignant"))
+set.seed(42)
+trainIndex <- createDataPartition(df$diagnosis, p = .8, list = FALSE, times = 1)
+train_data <- df[trainIndex, ]
+test_data  <- df[-trainIndex, ]
+
+ctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3,
+                     summaryFunction = twoClassSummary, classProbs = TRUE, savePredictions = "final")
+```
+
+## 6. Feature Selection with Lasso
+
+```{r}
+set.seed(42)
+lasso_model <- train(diagnosis ~ ., data = train_data, method = "glmnet",
+                     trControl = ctrl, metric = "ROC", preProc = c("center", "scale"),
+                     tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(-4, 0, length.out = 100)))
+
+plot(varImp(lasso_model), top = 20, main = "Top 15 Features from Lasso")
+
+selected_features <- names(coef(lasso_model$finalModel, lasso_model$bestTune$lambda)
+                           [which(coef(lasso_model$finalModel, lasso_model$bestTune$lambda) != 0),])[-1]
+
+train_selected <- train_data %>% select(all_of(selected_features), diagnosis)
+test_selected <- test_data %>% select(all_of(selected_features), diagnosis)
+```
+
+## 6b. Correlation Matrix After Lasso
+
+```{r, fig.width=8, fig.height=8}
+cor_selected <- train_selected %>% select(-diagnosis) %>% cor()
+
+corrplot(cor_selected,
+         method = "circle",
+         type = "lower",
+         order = "hclust",
+         tl.col = "black",
+         tl.srt = 45,
+         addCoef.col = "black",
+         number.cex = 0.6,
+         cl.cex = 0.8,
+         title = "Correlation Matrix of Selected Features After Lasso",
+         mar=c(0,0,1,0))
+```
+
+## 7. Model Training and Hyperparameter Tuning
+
+```{r}
+set.seed(42)
+model_lr <- train(diagnosis ~ ., data = train_selected, method = "glm", 
+                  trControl = ctrl, metric = "ROC", preProc = c("center", "scale"))
+model_lda <- train(diagnosis ~ ., data = train_selected, method = "lda", 
+                   trControl = ctrl, metric = "ROC", preProc = c("center", "scale"))
+model_glmnet <- lasso_model
+model_svm <- train(diagnosis ~ ., data = train_selected, method = "svmRadial", 
+                   trControl = ctrl, metric = "ROC", preProc = c("center", "scale"), tuneLength = 5)
+model_knn <- train(diagnosis ~ ., data = train_selected, method = "knn", 
+                   trControl = ctrl, metric = "ROC", preProc = c("center", "scale"), tuneLength = 10)
+model_rf <- train(diagnosis ~ ., data = train_selected, method = "rf", 
+                  trControl = ctrl, metric = "ROC", tuneLength = 5, ntree = 500)
+model_bag <- train(diagnosis ~ ., data = train_selected, method = "treebag",
+                   trControl = ctrl, metric = "ROC")
+model_nnet <- train(diagnosis ~ ., data = train_selected, method = "nnet",
+                    trControl = ctrl, metric = "ROC", preProc = c("center", "scale"),
+                    tuneLength = 3, trace = FALSE)
+```
+
+## 8. Final Evaluation on Test Set (All Models)
+
+```{r}
+models_list <- list(
+  LR = model_lr,
+  LDA = model_lda,
+  SVM = model_svm,
+  KNN = model_knn,
+  RF = model_rf,
+  Bagging = model_bag,
+  NNet = model_nnet,
+  Lasso = model_glmnet
+)
+
+conf_matrices <- list()
+auc_scores <- data.frame(Model = character(), AUC = numeric(), Accuracy = numeric(), 
+                         Sensitivity = numeric(), Specificity = numeric(), stringsAsFactors = FALSE)
+
+for (model_name in names(models_list)) {
+  cat("\n###", model_name, "\n")
+  mod <- models_list[[model_name]]
+  preds <- predict(mod, newdata = test_selected)
+  probs <- predict(mod, newdata = test_selected, type = "prob")
+  cm <- confusionMatrix(preds, test_selected$diagnosis, positive = "Malignant")
+  print(cm)
+  roc_obj <- roc(test_selected$diagnosis, probs$Malignant)
+  plot(roc_obj, main = paste("ROC Curve -", model_name), col = "blue")
+
+  conf_matrices[[model_name]] <- cm
+  auc_scores <- rbind(auc_scores, data.frame(
+    Model = model_name,
+    AUC = auc(roc_obj),
+    Accuracy = cm$overall['Accuracy'],
+    Sensitivity = cm$byClass['Sensitivity'],
+    Specificity = cm$byClass['Specificity']
+  ))
+}
+```
+
+## 9. Summary Table of Model Performance (Test Set)
+
+```{r}
+results <- resamples(models_list)
+dotplot(results, metric = "ROC", main = "ROC Comparison Across Models")
+
+auc_scores <- auc_scores %>%
+  arrange(desc(AUC)) %>%
+  mutate_if(is.numeric, round, digits = 3)
+
+knitr::kable(auc_scores, caption = "Performance Metrics for All Models on Test Set")
+```
+
+``` markdown
+```
