@@ -1,0 +1,127 @@
+---
+title: "ADS 503 Final Project"
+author: "April Chia"
+output:
+  pdf_document:
+    latex_engine: xelatex
+date: "2025-06-05"
+---
+## Packages used
+```{r warning=FALSE, message=FALSE}
+library(caret)
+library(tidyverse)
+library(ggplot2)
+library(reshape2)
+library(corrplot)
+library(Hmisc)
+library(mlbench)
+library(e1071)
+library(randomForest)
+library(gt)
+library(pls)
+library(elasticnet)
+library(pROC)
+```
+
+## Import dataset
+```{r}
+cancer_data <- read.csv("breast-cancer.csv")
+head(cancer_data)
+```
+
+## EDA
+```{r}
+summary(cancer_data)
+
+# Data types
+str(cancer_data)
+
+# Missing values
+sum(is.na(cancer_data))
+
+# Duplicates
+sum(duplicated(cancer_data))
+```
+
+```{r}
+# Distribution of predictors
+cancer_data |>
+pivot_longer(-diagnosis, names_to = 'feature', values_to = 'value') |>
+ggplot(aes(x = value)) +
+geom_histogram(bins = 30) +
+facet_wrap(~ feature, scales = "free", ncol = 3) +
+labs(title = 'Glass Data Features', x = "values", y = "Count")
+```
+
+```{r}
+# Distribution of diagnosis classes
+table(cancer_data$diagnosis)
+prop.table(table(cancer_data$diagnosis))
+```
+
+```{r}
+# Relationship between predictors and response
+predictor_data <- cancer_data[, names(cancer_data) != "diagnosis"]
+
+# Convert to long format
+df_long <- data.frame(
+  diagnosis = rep(cancer_data$diagnosis, times = ncol(predictor_data)),
+  feature = rep(names(predictor_data), each = nrow(cancer_data)),
+  value = as.vector(as.matrix(predictor_data))
+)
+
+ggplot(df_long, aes(x = value, fill = diagnosis)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ feature, scales = "free") +
+  theme_minimal()
+```
+
+```{r}
+# Predictors w/ near zero variance
+degenerate <- nearZeroVar(predictor_data)
+print(degenerate)
+```
+
+```{r}
+# Correlation between predictors
+cor_matrix <- cor(predictor_data)
+cor_long <- melt(cor_matrix)
+
+ggplot(cor_long, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",
+                       midpoint = 0, limit = c(-1, 1), space = "Lab",
+                       name = "Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  coord_fixed() +
+  labs(title = "Predictor Correlation Heatmap", x = "", y = "")
+```
+
+```{r}
+# Skewness
+apply(cancer_data[, -2], 2, skewness)
+```
+
+## Pre-processing
+```{r}
+# Remove uneccessary columns
+df <- cancer_data[, -which(names(cancer_data) == "id")]
+head(df)
+
+# Convert diagnosis to factor
+df$diagnosis <- factor(df$diagnosis, levels = c("B", "M"))
+
+# BoxCox Transformation
+non_bct_cols <- c("smoothness_mean", "texture_worst", "smoothness_worst", "concave.points_worst")
+bct_cols <- setdiff(names(df), non_bct_cols)
+
+params <- preProcess(df[, bct_cols], method = "BoxCox")
+df_transformed <- predict(params, df[, bct_cols])
+df[, bct_cols] <- df_transformed
+```
+
+```{r}
+# Confirm transformation
+apply(df_transformed[, -1], 2, skewness)
+```
