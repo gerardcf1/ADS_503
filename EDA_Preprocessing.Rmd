@@ -11,6 +11,7 @@ date: "2025-06-05"
 library(caret)
 library(tidyverse)
 library(ggplot2)
+library(DataExplorer)
 library(reshape2)
 library(corrplot)
 library(Hmisc)
@@ -45,12 +46,7 @@ sum(duplicated(cancer_data))
 
 ```{r}
 # Distribution of predictors
-cancer_data |>
-pivot_longer(-diagnosis, names_to = 'feature', values_to = 'value') |>
-ggplot(aes(x = value)) +
-geom_histogram(bins = 30) +
-facet_wrap(~ feature, scales = "free", ncol = 3) +
-labs(title = 'Glass Data Features', x = "values", y = "Count")
+plot_histogram(cancer_data, nrow = 6, ncol = 6)
 ```
 
 ```{r}
