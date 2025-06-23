@@ -10,9 +10,10 @@ To use the project:
 git init
 ```
 ```
-git clone https://github.com/mirna1983/dermatology-project.git
+git clone https://github.com/gerardcf1/ADS_503.git
 ```
-2. Run the [Final Project Notebook]()
+2. Run [EDA](https://github.com/gerardcf1/ADS_503/blob/main/EDA_Preprocessing.Rmd) file to view exploratory data analysis.
+3. Run the [Final Project Notebook](https://github.com/gerardcf1/ADS_503/blob/main/Final%20Project%20-%20Breast.ipynb)
 
 ## Project Introduction and Objective
 The objective is to develop and evaluate various classification models and compare their performance using metrics such as accuracy, precision, recall, and the area under the receiver operating characteristic curve (AUC-ROC). By systematically tuning hyperparameters and applying best practices in data preprocessing, validation, and evaluation, the analysis aims to identify the most effective model for classifying breast cancer tumors as benign or malignant. The use of a rigorous and systematic modeling strategy ensures that the chosen model not only achieves high performance on historical data, but also generalizes well to unseen cases.
